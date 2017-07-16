@@ -17,45 +17,60 @@ var trainStart = "";
 var trainFreq = "";
 var nextArrival = "";
 var remains = "";
+// css?
 $("h1").attr("style", "text-align: center;");
 
-var formatHHmm = function(minString) {
-	var hh = minString.split(":")[0];
-	var mm = minString.split(":")[1];
+// converts strings in "HH:mm" to minutes as an integer
+var converToMins = function(HHmm) {
+	var hh = HHmm.split(":")[0];
+	var mm = HHmm.split(":")[1];
 	return parseInt(hh) * 60 + parseInt(mm);
+}
+// converts minutes as an integer to "HH:mm" string
+var convertToHHmm = function(mins) {
+	var hh = parseInt(mins / 60);
+	var mm = parseInt(mins % 60);
+	// stringify the output
+	var str = "";
+ 	if(hh > 23) {
+ 		hh = hh % 24;
+ 	}
+ 	if(hh < 10) {
+ 		str += "0" + hh;
+ 	} else {
+ 		str += hh;
+ 	}
+ 	if(mm < 10) {
+ 		str += ":0" + mm;
+ 	} else {
+ 		str += ":" + mm
+ 	}
+	return str;
 }
 // calc converts trainStart and trainFreq into variables remains and nextArrival
 var calc = function() {
-	var startMin = formatHHmm(trainStart);
+	// minutes since midnight to firstArrival 
+	var startMin = converToMins(trainStart);
 	var nowTime = moment().format("HH:mm");
-	var nowMin = formatHHmm(nowTime);
-
-  	var dif = Math.abs(nowMin - startMin);
-  	remains = dif % parseInt(trainFreq);
-  	alert(remains);
-  	nextArrival = formatHHmm(remains.toString());
-
- 	// nowMins += remains;
- 	// if(nowMins >= 60) {
- 	// 	do {
- 	// 		nowMins -= 60;
- 	// 		nowHrs ++;
- 	// 	} while(nowMins >= 60);
- 	// 	if(nowHrs > 23) {
- 	// 		nowHrs = nowHrs % 24;
- 	// 	}
- 	// }
- 	// if(nowMins < 10) {
- 	// 	nowMins = "0" + nowMins;
- 	// }
- 	// if(nowHrs < 10) {
- 	// 	nowHrs = "0" + nowHrs;
- 	// }
- 	
+	// minutes since midnight to now
+	var nowMin = converToMins(nowTime);
+	// if the train already came
+	if(startMin < nowMin) {
+		var dif = nowMin - startMin;
+		// the number of times the train has already come
+		var intervals = parseInt(dif / parseInt(trainFreq));
+		var lastTrain = intervals * parseInt(trainFreq) + startMin;
+		var nextTrain = lastTrain + parseInt(trainFreq);
+		nextArrival = convertToHHmm(nextTrain);
+		remains = nextTrain - nowMin;
+	} else {
+		nextArrival = convertToHHmm(startMin);
+		remains = startMin - nowMin;
+	}
 }
 // Get values from form fields and push to database
 var submit = function() {
-	// sets local variables to form field values
+	// sets local variables from form field values
 	trainName = $("#trainName").val().trim();
 	trainDest = $("#trainDest").val().trim();
 	trainStart = $("#trainStart").val().trim();
@@ -75,7 +90,7 @@ var update = function(snapshot) {
 	// sets local variables to database values
 	trainName = sv.trainName;
 	trainDest = sv.trainDest;
-	trainStart = sv.trainStart.toString();
+	trainStart = sv.trainStart;
 	trainFreq = sv.trainFreq;
 	// converts trainStart and trainFreq into nextArrival and remains
     calc();
@@ -86,21 +101,25 @@ var update = function(snapshot) {
 	"</td><td>" + nextArrival +
 	"</td><td>" + remains + "</td></tr>");
 }
+// runs once a minute on the minute
 var clock = function() {
-
 	var ref = database.ref();
 	ref.on("value", function(snapshot) {
 		var sv = snapshot.val();
 	    var key = Object.keys(sv);
-
+	    // empties the trainTable div
 		$("#trainTable").empty();
+		// forEach (replaced my wicked for loop)
 	    key.forEach(function(itm, idx, arr){
 	    	var k = key[idx];
+	    	// pull database values down
 	    	trainName = sv[k].trainName;
 			trainDest = sv[k].trainDest;
-			trainStart = sv[k].trainStart.toString();
+			trainStart = sv[k].trainStart;
 			trainFreq = sv[k].trainFreq;
+			// convert trainStart and trainFreq into nextArrival and remains
 			calc();
+			// update html
 			$("#trainTable").append("<tr><td>" + trainName +
 			"</td><td>" + trainDest +
 			"</td><td>" + trainFreq +
@@ -109,12 +128,17 @@ var clock = function() {
 	    });
 	});
 }
+// updates the real time clock to within 1/10 of a second
 function realTime() {
   	$("#clock").html(moment().format("HH:mm:ss"));
   	if(moment().format("ss") == 0) {
+  		// updates the train times on every minute
   		clock();
   	}
 }
+// on click submit 
 $("#submitBtn").on("click", submit);
+// on child added calc() and display on html
 database.ref().on("child_added", update);
+// runs the clock to a precision of 1/10 of a second and updates html on the minute
 var realClock = setInterval(realTime, 100);
